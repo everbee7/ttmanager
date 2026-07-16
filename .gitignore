@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Build outputs and generated installers
+dist/
+dist-installer/
+apps/desktop/renderer/dist/
+apps/desktop/electron/dist/
+apps/desktop/electron/bin/
+*.exe
+*.blockmap
+*.7z
+*.asar
+
+# Logs and local runtime files
+*.log
+web-*.log
+web-*.out.log
+web-*.err.log
+electron-asar-run.log
+packaged-run.log
+
+# Local packaging/debug scratch files
+main.js
+packaged-main.js
+packaged-package.json
+
+# Databases, backups, and local exports
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.bak
+exports/
+backups/
+
+# Environment and editor files
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Test/cache artifacts
+coverage/
+.vite/
+.turbo/
+.cache/
