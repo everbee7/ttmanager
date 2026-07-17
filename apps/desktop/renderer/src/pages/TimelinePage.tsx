@@ -10,7 +10,7 @@ import { createPeriod, deletePeriod, getSnapshot, updatePeriod, updateTask } fro
 import { PeriodEditor } from "@/components/PeriodEditor";
 import type { Snapshot, Task, TimePeriod } from "@shared/contracts";
 import { useSearchParams } from "react-router-dom";
-import { formatZoned, sameZonedDay, zonedHourPosition, zonedNow } from "@/lib/datetime";
+import { formatZoned, sameZonedDay, zonedDayBoundsUtc, zonedHourPosition, zonedNow } from "@/lib/datetime";
 
 const hourHeight = 72;
 type PeriodSavePayload = { id?: string; title: string; description: string | null; startAtUtc: string; endAtUtc: string; sourceTimezone: string; category: string; color: string; notes: string | null; recurrenceRule: TimePeriod["recurrenceRule"]; recurrenceEditScope?: "this" | "following" | "series" };
@@ -175,8 +175,9 @@ export function TimelinePage() {
 function PeriodBlock({ period, layout, periods, selected, selectedDay, timezone, onSelect, onEdit, onDuplicate, onDelete, onMove }: { period: TimePeriod; layout: { lane: number; lanes: number }; periods: TimePeriod[]; selected: boolean; selectedDay: Date; timezone: string; onSelect: () => void; onEdit: () => void; onDuplicate: () => void; onDelete: () => void; onMove: (payload: PeriodMovePayload) => void }) {
   const start = new Date(period.startAtUtc);
   const end = new Date(period.endAtUtc);
-  const dayStart = new Date(selectedDay.getFullYear(), selectedDay.getMonth(), selectedDay.getDate());
-  const dayEnd = addDays(dayStart, 1);
+  const bounds = zonedDayBoundsUtc(selectedDay, timezone);
+  const dayStart = new Date(bounds.startUtc);
+  const dayEnd = new Date(bounds.endUtc);
   const visibleStart = start < dayStart ? dayStart : start;
   const visibleEnd = end > dayEnd ? dayEnd : end;
   const top = zonedHourPosition(visibleStart, timezone) * hourHeight;
