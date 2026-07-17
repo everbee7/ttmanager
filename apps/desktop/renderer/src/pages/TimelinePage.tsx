@@ -98,13 +98,6 @@ export function TimelinePage() {
   const periods = allPeriods.filter((period) => sameZonedDay(period.startAtUtc, selectedDay, displayTimezone) || sameZonedDay(period.endAtUtc, selectedDay, displayTimezone));
   const selectedPeriod = selected ? allPeriods.find((period) => period.id === selected.id) ?? null : null;
   const periodLayouts = useMemo(() => layoutOverlappingPeriods(periods), [periods]);
-  const busyLabel = save.isPending
-    ? "Saving timeline..."
-    : movePeriod.isPending
-      ? "Updating timeline..."
-      : remove.isPending
-        ? "Deleting timeline..."
-        : "";
   useEffect(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
@@ -179,22 +172,6 @@ export function TimelinePage() {
           movePeriod.mutate(payload);
         }}
       />
-      <TimelineBusyOverlay label={busyLabel} />
-    </div>
-  );
-}
-
-function TimelineBusyOverlay({ label }: { label: string }) {
-  if (!label) return null;
-  return (
-    <div className="fixed inset-0 z-[80] grid place-items-center bg-black/35 backdrop-blur-[2px]">
-      <div className="flex min-w-72 items-center gap-3 rounded-[14px] border border-line bg-panel/95 px-5 py-4 shadow-panel">
-        <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-        <div>
-          <div className="text-[14px] font-semibold">{label}</div>
-          <div className="mt-0.5 text-[12px] text-muted">Please wait while the schedule is recalculated.</div>
-        </div>
-      </div>
     </div>
   );
 }
