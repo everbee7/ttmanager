@@ -1,11 +1,11 @@
 import { Outlet, NavLink } from "react-router-dom";
 import { CalendarDays, CheckSquare, Clock3, History, LayoutDashboard, Menu, PieChart, Settings, Search, Plus } from "lucide-react";
 import { motion } from "framer-motion";
-import { useQuery } from "@tanstack/react-query";
+import { useIsMutating, useQuery } from "@tanstack/react-query";
 import { getSnapshot } from "@/lib/api";
 import { useUiStore } from "@/store/uiStore";
 import { useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { CommandPalette } from "@/components/CommandPalette";
 
 const nav = [
@@ -25,6 +25,17 @@ export function AppShell() {
   const commandPaletteOpen = useUiStore((state) => state.commandPaletteOpen);
   const setCommandPaletteOpen = useUiStore((state) => state.setCommandPaletteOpen);
   const { data } = useQuery({ queryKey: ["snapshot"], queryFn: getSnapshot, refetchInterval: 30_000 });
+  const activeMutations = useIsMutating();
+  const [showActivity, setShowActivity] = useState(false);
+  const loadingLabel = !data ? "Loading schedule..." : activeMutations > 0 ? "Saving changes..." : "";
+  useEffect(() => {
+    if (!loadingLabel) {
+      setShowActivity(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setShowActivity(true), 180);
+    return () => window.clearTimeout(timer);
+  }, [loadingLabel]);
   useEffect(() => {
     const theme = data?.settings.theme ?? "dark";
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -94,6 +105,21 @@ export function AppShell() {
         </footer>
       </div>
       <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
+      {showActivity && loadingLabel && <AppActivityOverlay label={loadingLabel} />}
+    </div>
+  );
+}
+
+function AppActivityOverlay({ label }: { label: string }) {
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/25 backdrop-blur-[2px]">
+      <div className="flex min-w-72 items-center gap-3 rounded-[14px] border border-line bg-panel/95 px-5 py-4 shadow-panel">
+        <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+        <div>
+          <div className="text-[14px] font-semibold">{label}</div>
+          <div className="mt-0.5 text-[12px] text-muted">Working locally on this computer.</div>
+        </div>
+      </div>
     </div>
   );
 }

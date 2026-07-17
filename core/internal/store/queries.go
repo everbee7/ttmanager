@@ -243,8 +243,8 @@ func valueDefault(value, fallback string) string {
 
 func (s *Store) expandRecurringPeriods(periods []TimePeriod) []TimePeriod {
 	now := time.Now().UTC()
-	rangeStart := now.AddDate(-1, 0, 0)
-	rangeEnd := now.AddDate(2, 0, 0)
+	rangeStart := now.AddDate(0, 0, -45)
+	rangeEnd := now.AddDate(0, 0, 120)
 	out := make([]TimePeriod, 0, len(periods))
 	for _, period := range periods {
 		if period.RecurrenceRule == nil || period.RecurrenceRule.Frequency == "" || period.RecurrenceRule.Frequency == "none" {
