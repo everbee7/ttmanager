@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, powerMonitor, dialog, type OpenDialogOptions } from "electron";
+import { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, powerMonitor, dialog, shell, type OpenDialogOptions } from "electron";
 import path from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import crypto from "node:crypto";
@@ -258,12 +258,13 @@ function showAlarm(event: ReminderEvent) {
     existing.show();
     existing.focus();
     existing.flashFrame(true);
+    shell.beep();
     return;
   }
 
   const alarm = new BrowserWindow({
-    width: 560,
-    height: 620,
+    width: 540,
+    height: 500,
     resizable: false,
     frame: false,
     maximizable: false,
@@ -303,6 +304,7 @@ function showAlarm(event: ReminderEvent) {
     alarm.show();
     alarm.focus();
     alarm.flashFrame(true);
+    shell.beep();
   });
 }
 
@@ -312,6 +314,7 @@ function focusAlarm(id: string) {
   alarm.show();
   alarm.focus();
   alarm.flashFrame(true);
+  shell.beep();
 }
 
 async function handleAlarmAction(event: ReminderEvent, url: string) {
@@ -367,13 +370,13 @@ function alarmHtmlURL(event: ReminderEvent) {
       place-items: center;
     }
     .card {
-      width: calc(100% - 36px);
-      height: calc(100% - 36px);
+      width: calc(100% - 28px);
+      height: calc(100% - 28px);
       border: 1px solid rgba(255,255,255,.12);
       border-radius: 16px;
       background: linear-gradient(180deg, rgba(28,32,48,.96), rgba(12,14,24,.98));
       box-shadow: 0 24px 80px rgba(0,0,0,.48), inset 0 1px 0 rgba(255,255,255,.08);
-      padding: 26px;
+      padding: 22px;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -387,7 +390,7 @@ function alarmHtmlURL(event: ReminderEvent) {
     }
     .eyebrow { color: #facc15; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
     h1 {
-      margin: 18px 0 0;
+      margin: 16px 0 0;
       font-size: 23px;
       line-height: 1.22;
       letter-spacing: 0;
@@ -405,7 +408,7 @@ function alarmHtmlURL(event: ReminderEvent) {
       color: #cbd5e1;
       font-size: 14px;
       line-height: 1.5;
-      height: 150px;
+      height: 112px;
       overflow: hidden;
       white-space: pre-wrap;
       display: -webkit-box;
@@ -413,7 +416,7 @@ function alarmHtmlURL(event: ReminderEvent) {
       -webkit-box-orient: vertical;
     }
     .meta { margin-top: 12px; display: flex; justify-content: space-between; gap: 10px; color: #94a3b8; font-size: 12px; }
-    .actions { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 22px; }
+    .actions { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     button {
       border: 0;
       border-radius: 12px;
