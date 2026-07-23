@@ -271,6 +271,59 @@ func TestSnoozedReminderIsHiddenUntilLater(t *testing.T) {
 	}
 }
 
+func TestDueRemindersRebuildsMissingPeriodReminderAfterRestart(t *testing.T) {
+	s := testStore(t)
+	now := time.Now().UTC()
+	start := now.Add(-time.Minute).Format(time.RFC3339)
+	end := now.Add(time.Hour).Format(time.RFC3339)
+	period, err := s.CreatePeriod(CreatePeriodInput{Title: "Restart alarm", StartAtUTC: start, EndAtUTC: end, SourceTimezone: "America/Denver", Category: "Work", Color: "#2563eb"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`DELETE FROM reminders WHERE owner_type='period' AND owner_id=?`, period.ID); err != nil {
+		t.Fatal(err)
+	}
+	events, err := s.DueReminders(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].OwnerID != period.ID || events[0].Title != "Restart alarm" {
+		t.Fatalf("events=%+v", events)
+	}
+}
+
+func TestDueRemindersCreatesRecurringPeriodOccurrenceReminder(t *testing.T) {
+	s := testStore(t)
+	now := time.Now().UTC()
+	baseStart := now.AddDate(0, 0, -1).Add(-time.Minute).Truncate(time.Minute)
+	baseEnd := baseStart.Add(time.Hour)
+	period, err := s.CreatePeriod(CreatePeriodInput{
+		Title:          "Daily alarm",
+		StartAtUTC:     baseStart.Format(time.RFC3339),
+		EndAtUTC:       baseEnd.Format(time.RFC3339),
+		SourceTimezone: "America/Denver",
+		Category:       "Work",
+		Color:          "#2563eb",
+		RecurrenceRule: &RecurrenceRule{Frequency: "daily", IntervalCount: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkReminderSent("reminder-period-" + period.ID); err != nil {
+		t.Fatal(err)
+	}
+	events, err := s.DueReminders(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].OwnerID != period.ID || events[0].ID == "reminder-period-"+period.ID {
+		t.Fatalf("events=%+v", events)
+	}
+	if !strings.Contains(events[0].ID, "#occ#") {
+		t.Fatalf("recurring occurrence reminder id not used: %+v", events[0])
+	}
+}
+
 func TestRecurrenceRuleUpdatesPerOwner(t *testing.T) {
 	s := testStore(t)
 	task, err := s.CreateTask(CreateTaskInput{Title: "Repeat", Priority: "none", RecurrenceRule: &RecurrenceRule{Frequency: "daily", IntervalCount: 1}})
