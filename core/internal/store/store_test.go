@@ -219,7 +219,7 @@ func TestReminderSentPreventsDuplicateNotification(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	events, err := s.DueReminders(time.Now())
+	events, err := s.DueReminders(time.Now(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +229,7 @@ func TestReminderSentPreventsDuplicateNotification(t *testing.T) {
 	if err := s.MarkReminderSent(events[0].ID); err != nil {
 		t.Fatal(err)
 	}
-	events, err = s.DueReminders(time.Now())
+	events, err = s.DueReminders(time.Now(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestSnoozedReminderIsHiddenUntilLater(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	events, err := s.DueReminders(time.Now())
+	events, err := s.DueReminders(time.Now(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,7 @@ func TestSnoozedReminderIsHiddenUntilLater(t *testing.T) {
 	if err := s.SnoozeReminder(events[0].ID, 10); err != nil {
 		t.Fatal(err)
 	}
-	events, err = s.DueReminders(time.Now())
+	events, err = s.DueReminders(time.Now(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,7 +283,7 @@ func TestDueRemindersRebuildsMissingPeriodReminderAfterRestart(t *testing.T) {
 	if _, err := s.db.Exec(`DELETE FROM reminders WHERE owner_type='period' AND owner_id=?`, period.ID); err != nil {
 		t.Fatal(err)
 	}
-	events, err := s.DueReminders(now)
+	events, err := s.DueReminders(now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +312,7 @@ func TestDueRemindersCreatesRecurringPeriodOccurrenceReminder(t *testing.T) {
 	if err := s.MarkReminderSent("reminder-period-" + period.ID); err != nil {
 		t.Fatal(err)
 	}
-	events, err := s.DueReminders(now)
+	events, err := s.DueReminders(now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,6 +321,30 @@ func TestDueRemindersCreatesRecurringPeriodOccurrenceReminder(t *testing.T) {
 	}
 	if !strings.Contains(events[0].ID, "#occ#") {
 		t.Fatalf("recurring occurrence reminder id not used: %+v", events[0])
+	}
+}
+
+func TestDueRemindersIgnoresRemindersBeforeCurrentAppSession(t *testing.T) {
+	s := testStore(t)
+	now := time.Now().UTC()
+	closedStart := now.Add(-10 * time.Minute).Format(time.RFC3339)
+	closedEnd := now.Add(-9 * time.Minute).Format(time.RFC3339)
+	runningStart := now.Add(time.Minute).Format(time.RFC3339)
+	runningEnd := now.Add(2 * time.Minute).Format(time.RFC3339)
+	if _, err := s.CreatePeriod(CreatePeriodInput{Title: "Closed app period", StartAtUTC: closedStart, EndAtUTC: closedEnd, SourceTimezone: "America/Denver", Category: "Work", Color: "#2563eb"}); err != nil {
+		t.Fatal(err)
+	}
+	running, err := s.CreatePeriod(CreatePeriodInput{Title: "Running app period", StartAtUTC: runningStart, EndAtUTC: runningEnd, SourceTimezone: "America/Denver", Category: "Work", Color: "#2563eb"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionStart := now
+	events, err := s.DueReminders(now.Add(90*time.Second), &sessionStart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].OwnerID != running.ID {
+		t.Fatalf("events=%+v", events)
 	}
 }
 
