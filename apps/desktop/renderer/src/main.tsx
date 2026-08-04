@@ -13,7 +13,21 @@ import { ReportsPage } from "./pages/ReportsPage";
 import { CalendarPage } from "./pages/CalendarPage";
 import "./styles.css";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) => {
+        const message = error instanceof Error ? error.message : "";
+        if (message.includes("Local service error")) return failureCount < 40;
+        return failureCount < 8;
+      },
+      retryDelay: (attempt) => Math.min(1000 * Math.max(1, attempt), 5000),
+      refetchOnMount: "always",
+      refetchOnReconnect: "always",
+      refetchOnWindowFocus: true
+    }
+  }
+});
 const router = createHashRouter([
   {
     path: "/",

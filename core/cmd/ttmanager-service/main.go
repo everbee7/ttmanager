@@ -224,7 +224,19 @@ func handleRPC(w http.ResponseWriter, svc appService, req rpcRequest) {
 			writeOK(w, map[string]bool{"linked": false}, s.UnlinkTaskPeriod(input.TaskID, input.PeriodID))
 		}
 	case "reminders.due":
-		data, err := s.DueReminders(time.Now())
+		var input struct {
+			SinceUTC string `json:"sinceUtc"`
+		}
+		var since *time.Time
+		if req.Payload != nil {
+			_ = json.Unmarshal(req.Payload, &input)
+			if input.SinceUTC != "" {
+				if parsed, err := time.Parse(time.RFC3339, input.SinceUTC); err == nil {
+					since = &parsed
+				}
+			}
+		}
+		data, err := s.DueReminders(time.Now(), since)
 		writeOK(w, data, err)
 	case "reminders.sent":
 		var input struct {

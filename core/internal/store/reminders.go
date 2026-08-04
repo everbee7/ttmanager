@@ -2,9 +2,15 @@ package store
 
 import "time"
 
-func (s *Store) DueReminders(now time.Time) ([]ReminderEvent, error) {
-	if err := s.ReconcilePeriodReminders(now); err != nil {
+func (s *Store) DueReminders(now time.Time, since *time.Time) ([]ReminderEvent, error) {
+	if err := s.ReconcilePeriodReminders(now, since); err != nil {
 		return nil, err
+	}
+	params := []any{now.UTC().Format(time.RFC3339)}
+	sinceFilter := ""
+	if since != nil {
+		sinceFilter = " AND COALESCE(r.snoozed_until_utc, r.remind_at_utc) >= ?"
+		params = append(params, since.UTC().Format(time.RFC3339))
 	}
 	rows, err := s.db.Query(`SELECT r.id,r.owner_type,r.owner_id,r.remind_at_utc,
 		COALESCE(t.title,p.title,'Reminder') AS title
@@ -12,8 +18,9 @@ func (s *Store) DueReminders(now time.Time) ([]ReminderEvent, error) {
 		LEFT JOIN tasks t ON r.owner_type='task' AND t.id=r.owner_id AND t.deleted_at_utc IS NULL
 		LEFT JOIN time_periods p ON r.owner_type='period' AND p.id=r.owner_id AND p.deleted_at_utc IS NULL
 		WHERE r.status='pending' AND COALESCE(r.snoozed_until_utc, r.remind_at_utc) <= ?
+		`+sinceFilter+`
 		AND ((r.owner_type='task' AND t.id IS NOT NULL) OR (r.owner_type='period' AND p.id IS NOT NULL))
-		ORDER BY r.remind_at_utc LIMIT 20`, now.UTC().Format(time.RFC3339))
+		ORDER BY r.remind_at_utc LIMIT 20`, params...)
 	if err != nil {
 		return nil, err
 	}
@@ -36,8 +43,11 @@ func (s *Store) DueReminders(now time.Time) ([]ReminderEvent, error) {
 	return out, nil
 }
 
-func (s *Store) ReconcilePeriodReminders(now time.Time) error {
+func (s *Store) ReconcilePeriodReminders(now time.Time, since *time.Time) error {
 	windowStart := now.UTC().Add(-12 * time.Hour)
+	if since != nil && since.Before(now) {
+		windowStart = since.UTC()
+	}
 	windowEnd := now.UTC().AddDate(0, 0, 14)
 	periods := s.periods()
 	tx, err := s.db.Begin()

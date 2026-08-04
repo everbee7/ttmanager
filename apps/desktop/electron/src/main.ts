@@ -26,6 +26,7 @@ let schedulerTimer: NodeJS.Timeout | null = null;
 let schedulerEnabled = true;
 let notificationsPaused = false;
 let notificationsPausedUntil = 0;
+let schedulerSessionStartUtc = new Date().toISOString();
 const alarmWindows = new Map<string, BrowserWindow>();
 
 function traceStartup(message: string) {
@@ -244,7 +245,7 @@ async function pollReminders() {
   const settingsResponse = await requestBackend<{ settings?: NotificationSettings }>({ type: "snapshot" });
   const settings = settingsResponse.ok ? settingsResponse.data.settings : undefined;
   if (!shouldPollNotifications(settings)) return;
-  const response = await requestBackend<ReminderEvent[]>({ type: "reminders.due" });
+  const response = await requestBackend<ReminderEvent[]>({ type: "reminders.due", payload: { sinceUtc: schedulerSessionStartUtc } });
   if (!response.ok) return;
   for (const event of response.data) {
     if (!shouldShowReminderType(event, settings)) continue;
@@ -498,6 +499,7 @@ function openReminder(event: ReminderEvent) {
 
 function startScheduler() {
   if (schedulerTimer) return;
+  schedulerSessionStartUtc = new Date().toISOString();
   schedulerTimer = setInterval(() => void pollReminders(), 30_000);
   setTimeout(() => void pollReminders(), 3_000);
 }
