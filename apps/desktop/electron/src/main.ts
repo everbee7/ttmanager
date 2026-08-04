@@ -265,7 +265,7 @@ function showAlarm(event: ReminderEvent) {
 
   const alarm = new BrowserWindow({
     width: 540,
-    height: 500,
+    height: 560,
     resizable: false,
     frame: false,
     maximizable: false,
@@ -409,11 +409,11 @@ function alarmHtmlURL(event: ReminderEvent) {
       color: #cbd5e1;
       font-size: 14px;
       line-height: 1.5;
-      height: 112px;
+      height: 170px;
       overflow: hidden;
       white-space: pre-wrap;
       display: -webkit-box;
-      -webkit-line-clamp: 5;
+      -webkit-line-clamp: 8;
       -webkit-box-orient: vertical;
     }
     .meta { margin-top: 12px; display: flex; justify-content: space-between; gap: 10px; color: #94a3b8; font-size: 12px; }

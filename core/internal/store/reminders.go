@@ -1,6 +1,10 @@
 package store
 
-import "time"
+import (
+	"strconv"
+	"strings"
+	"time"
+)
 
 func (s *Store) DueReminders(now time.Time, since *time.Time) ([]ReminderEvent, error) {
 	if err := s.ReconcilePeriodReminders(now, since); err != nil {
@@ -13,10 +17,17 @@ func (s *Store) DueReminders(now time.Time, since *time.Time) ([]ReminderEvent, 
 		params = append(params, since.UTC().Format(time.RFC3339))
 	}
 	rows, err := s.db.Query(`SELECT r.id,r.owner_type,r.owner_id,r.remind_at_utc,
-		COALESCE(t.title,p.title,'Reminder') AS title
+		COALESCE(t.title,p.title,'Reminder') AS title,
+		COALESCE(t.content,''), COALESCE(t.priority,''), COALESCE(t.due_at_utc,''),
+		COALESCE(p.description,''), COALESCE(p.notes,''), COALESCE(p.category,''), COALESCE(p.start_at_utc,''), COALESCE(p.end_at_utc,''), COALESCE(p.linked_count,0)
 		FROM reminders r
 		LEFT JOIN tasks t ON r.owner_type='task' AND t.id=r.owner_id AND t.deleted_at_utc IS NULL
-		LEFT JOIN time_periods p ON r.owner_type='period' AND p.id=r.owner_id AND p.deleted_at_utc IS NULL
+		LEFT JOIN (
+			SELECT p.*, COUNT(l.task_id) AS linked_count
+			FROM time_periods p
+			LEFT JOIN task_period_links l ON l.period_id=p.id
+			GROUP BY p.id
+		) p ON r.owner_type='period' AND p.id=r.owner_id AND p.deleted_at_utc IS NULL
 		WHERE r.status='pending' AND COALESCE(r.snoozed_until_utc, r.remind_at_utc) <= ?
 		`+sinceFilter+`
 		AND ((r.owner_type='task' AND t.id IS NOT NULL) OR (r.owner_type='period' AND p.id IS NOT NULL))
@@ -28,19 +39,66 @@ func (s *Store) DueReminders(now time.Time, since *time.Time) ([]ReminderEvent, 
 	out := []ReminderEvent{}
 	for rows.Next() {
 		var event ReminderEvent
-		if err := rows.Scan(&event.ID, &event.OwnerType, &event.OwnerID, &event.RemindAtUTC, &event.Title); err != nil {
+		var taskContent, taskPriority, taskDue string
+		var periodDescription, periodNotes, periodCategory, periodStart, periodEnd string
+		var linkedCount int
+		if err := rows.Scan(&event.ID, &event.OwnerType, &event.OwnerID, &event.RemindAtUTC, &event.Title, &taskContent, &taskPriority, &taskDue, &periodDescription, &periodNotes, &periodCategory, &periodStart, &periodEnd, &linkedCount); err != nil {
 			return nil, err
 		}
 		if event.OwnerType == "period" {
 			event.EventType = "period_start"
-			event.Body = "Time period started"
+			event.Body = periodReminderBody(periodCategory, periodStart, periodEnd, periodDescription, periodNotes, linkedCount)
 		} else {
 			event.EventType = "task_due"
-			event.Body = "Task is due"
+			event.Body = taskReminderBody(taskPriority, taskDue, taskContent)
 		}
 		out = append(out, event)
 	}
 	return out, nil
+}
+
+func periodReminderBody(category, startAt, endAt, description, notes string, linkedTaskCount int) string {
+	lines := []string{"Time period started"}
+	if startAt != "" && endAt != "" {
+		lines = append(lines, "Time: "+formatReminderClock(startAt)+" - "+formatReminderClock(endAt))
+	}
+	if category != "" {
+		lines = append(lines, "Category: "+category)
+	}
+	lines = append(lines, "Linked tasks: "+itoa(linkedTaskCount))
+	if strings.TrimSpace(description) != "" {
+		lines = append(lines, "", strings.TrimSpace(description))
+	}
+	if strings.TrimSpace(notes) != "" {
+		lines = append(lines, "", "Notes: "+strings.TrimSpace(notes))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func taskReminderBody(priority, dueAt, content string) string {
+	lines := []string{"Task is due"}
+	if priority != "" {
+		lines = append(lines, "Priority: "+priority)
+	}
+	if dueAt != "" {
+		lines = append(lines, "Due: "+formatReminderClock(dueAt))
+	}
+	if strings.TrimSpace(content) != "" {
+		lines = append(lines, "", strings.TrimSpace(content))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatReminderClock(value string) string {
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return value
+	}
+	return parsed.UTC().Format("Jan 2 15:04 UTC")
+}
+
+func itoa(value int) string {
+	return strconv.Itoa(value)
 }
 
 func (s *Store) ReconcilePeriodReminders(now time.Time, since *time.Time) error {
