@@ -276,7 +276,9 @@ func TestDueRemindersRebuildsMissingPeriodReminderAfterRestart(t *testing.T) {
 	now := time.Now().UTC()
 	start := now.Add(-time.Minute).Format(time.RFC3339)
 	end := now.Add(time.Hour).Format(time.RFC3339)
-	period, err := s.CreatePeriod(CreatePeriodInput{Title: "Restart alarm", StartAtUTC: start, EndAtUTC: end, SourceTimezone: "America/Denver", Category: "Work", Color: "#2563eb"})
+	description := "Review launch work before starting."
+	notes := "Keep this alarm visible until acknowledged."
+	period, err := s.CreatePeriod(CreatePeriodInput{Title: "Restart alarm", Description: &description, StartAtUTC: start, EndAtUTC: end, SourceTimezone: "America/Denver", Category: "Work", Color: "#2563eb", Notes: &notes})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,6 +291,11 @@ func TestDueRemindersRebuildsMissingPeriodReminderAfterRestart(t *testing.T) {
 	}
 	if len(events) != 1 || events[0].OwnerID != period.ID || events[0].Title != "Restart alarm" {
 		t.Fatalf("events=%+v", events)
+	}
+	for _, expected := range []string{"Time period started", "Category: Work", "Linked tasks: 0", description, notes} {
+		if !strings.Contains(events[0].Body, expected) {
+			t.Fatalf("reminder body missing %q: %q", expected, events[0].Body)
+		}
 	}
 }
 
@@ -627,7 +634,6 @@ func TestDeleteRepeatingPeriodOccurrenceAndFollowingEndsSeries(t *testing.T) {
 		t.Fatalf("first=%v secondOrLater=%v", foundFirst, foundSecondOrLater)
 	}
 }
-
 
 func TestGeneratedOccurrenceSetNoRepeatCreatesSingleException(t *testing.T) {
 	s := testStore(t)

@@ -329,7 +329,8 @@ function PeriodDetail({ period, allPeriods, tasks, timezone, onUnlinkTask, onEdi
               <Detail label="Repeat" value={repeatLabel(period, allPeriods)} />
               <Detail label="Linked tasks" value={String(period.linkedTaskCount)} />
             </dl>
-            {period.notes && <p className="scroll-smooth-ui mt-4 max-h-64 overflow-auto whitespace-pre-line break-words rounded-[10px] border border-line bg-panel p-3 text-[13px] text-muted">{period.notes}</p>}
+            <ReadOnlyTextBlock title="Description" value={period.description} empty="No description added yet." />
+            <ReadOnlyTextBlock title="Notes" value={period.notes} empty="No notes added yet." />
           </div>
           <div className="mt-4 rounded-[12px] border border-line bg-surface p-4">
             <h3 className="text-[13px] font-semibold uppercase text-muted">Linked tasks</h3>
@@ -357,6 +358,17 @@ function PeriodDetail({ period, allPeriods, tasks, timezone, onUnlinkTask, onEdi
         </div>
       )}
     </aside>
+  );
+}
+
+function ReadOnlyTextBlock({ title, value, empty }: { title: string; value?: string | null; empty: string }) {
+  return (
+    <section className="mt-4 rounded-[10px] border border-line bg-panel p-3">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">{title}</div>
+      <div className={`scroll-smooth-ui mt-2 max-h-40 overflow-auto whitespace-pre-line break-words text-[13px] leading-5 ${value ? "text-ink" : "text-muted"}`}>
+        {value || empty}
+      </div>
+    </section>
   );
 }
 
