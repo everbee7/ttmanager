@@ -27,6 +27,7 @@ export const TaskSchema = z.object({
   typeId: z.string().nullable(),
   dueAtUtc: z.string().nullable(),
   status: TaskStatusSchema,
+  stepId: z.string().nullish().transform((value) => value ?? null),
   linkedPeriodIds: z.array(z.string()),
   recurrenceRule: RecurrenceRuleSchema.nullable().default(null),
   createdAtUtc: z.string(),
@@ -66,6 +67,26 @@ export const TimePeriodSchema = z.object({
   recurrenceRule: RecurrenceRuleSchema.nullable().default(null)
 });
 
+export const SMART_STEP_IDS = ["overdue", "today", "planned", "inbox", "done"] as const;
+export type SmartStepId = (typeof SMART_STEP_IDS)[number];
+
+export const BoardStepSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  hint: z.string().default(""),
+  color: z.string(),
+  kind: z.enum(["smart", "custom"]),
+  hidden: z.boolean().default(false)
+});
+
+export const DEFAULT_BOARD_STEPS: z.infer<typeof BoardStepSchema>[] = [
+  { id: "overdue", label: "Overdue", hint: "Due date has passed", color: "#dd2c22", kind: "smart", hidden: false },
+  { id: "today", label: "Today", hint: "Due today or urgent", color: "#ffc61a", kind: "smart", hidden: false },
+  { id: "planned", label: "Planned", hint: "Scheduled or linked work", color: "#ff8c00", kind: "smart", hidden: false },
+  { id: "inbox", label: "Inbox", hint: "No schedule yet", color: "#9aa1b9", kind: "smart", hidden: false },
+  { id: "done", label: "Done", hint: "Completed work", color: "#22c55e", kind: "smart", hidden: false }
+];
+
 export const AppSettingsSchema = z.object({
   theme: z.enum(["light", "dark", "system"]),
   defaultTimezone: z.string(),
@@ -80,7 +101,8 @@ export const AppSettingsSchema = z.object({
   quietHoursEnabled: z.boolean(),
   quietHoursStart: z.string(),
   quietHoursEnd: z.string(),
-  defaultSnoozeMinutes: z.number().int().min(5)
+  defaultSnoozeMinutes: z.number().int().min(5),
+  boardSteps: z.array(BoardStepSchema).nullish().transform((value) => value?.length ? value : DEFAULT_BOARD_STEPS)
 });
 
 export const CreateTaskSchema = z.object({
@@ -89,6 +111,7 @@ export const CreateTaskSchema = z.object({
   priority: PrioritySchema.default("none"),
   typeId: z.string().nullable().default(null),
   dueAtUtc: z.string().nullable().default(null),
+  stepId: z.string().nullable().optional(),
   linkedPeriodIds: z.array(z.string()).default([]),
   recurrenceRule: RecurrenceRuleSchema.nullable().default(null)
 });
@@ -152,6 +175,7 @@ export type UpdateTaskTypeInput = z.infer<typeof UpdateTaskTypeSchema>;
 export type TimePeriod = z.infer<typeof TimePeriodSchema>;
 export type RecurrenceRule = z.infer<typeof RecurrenceRuleSchema>;
 export type AppSettings = z.infer<typeof AppSettingsSchema>;
+export type BoardStep = z.infer<typeof BoardStepSchema>;
 export type CreateTaskInput = z.infer<typeof CreateTaskSchema>;
 export type CreatePeriodInput = z.infer<typeof CreatePeriodSchema>;
 export type UpdateTaskInput = z.infer<typeof UpdateTaskSchema>;

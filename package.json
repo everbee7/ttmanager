@@ -12,7 +12,7 @@
     "build": "npm run build:renderer && npm run build:electron && npm run build:go",
     "build:renderer": "vite build",
     "build:electron": "tsc -p apps/desktop/electron/tsconfig.json && node scripts/rename-electron-cjs.cjs",
-    "build:go": "go -C core build -o ../apps/desktop/electron/bin/ttmanager-service.exe ./cmd/ttmanager-service",
+    "build:go": "cross-env GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go -C core build -o ../apps/desktop/electron/bin/ttmanager-service.exe ./cmd/ttmanager-service",
     "dist": "npm run build && electron-builder",
     "dist:portable": "npm run build && electron-builder --win portable",
     "test": "npm run test:go && npm run test:renderer",

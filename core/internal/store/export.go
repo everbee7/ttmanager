@@ -31,6 +31,28 @@ func (s *Store) UpdateSettings(values map[string]any) error {
 		"notificationsEnabled": true, "periodNotifications": true, "taskNotifications": true, "quietHoursEnabled": true, "quietHoursStart": true, "quietHoursEnd": true, "defaultSnoozeMinutes": true,
 	}
 	for key, value := range values {
+		if key == "boardSteps" {
+			bytes, err := json.Marshal(value)
+			if err != nil {
+				return err
+			}
+			var steps []BoardStep
+			if err := json.Unmarshal(bytes, &steps); err != nil {
+				return errors.New("invalid board steps")
+			}
+			normalized, err := normalizeBoardSteps(steps)
+			if err != nil {
+				return err
+			}
+			encoded, _ := json.Marshal(normalized)
+			if _, err := tx.Exec(`INSERT INTO settings(key,value) VALUES('boardSteps',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, string(encoded)); err != nil {
+				return err
+			}
+			if err := clearOrphanedTaskSteps(tx, normalized); err != nil {
+				return err
+			}
+			continue
+		}
 		if !allowed[key] {
 			continue
 		}
@@ -216,6 +238,7 @@ func ImportJSONSnapshot(db *sql.DB, path string) error {
 		"quietHoursStart":      snapshot.Settings.QuietHoursStart,
 		"quietHoursEnd":        snapshot.Settings.QuietHoursEnd,
 		"defaultSnoozeMinutes": intString(snapshot.Settings.DefaultSnoozeMinutes),
+		"boardSteps":           boardStepsString(snapshot.Settings.BoardSteps),
 	} {
 		if value != "" {
 			if _, err := tx.Exec(`INSERT INTO settings(key,value) VALUES(?,?)`, key, value); err != nil {
@@ -235,8 +258,8 @@ func ImportJSONSnapshot(db *sql.DB, path string) error {
 		}
 	}
 	for _, task := range snapshot.Tasks {
-		if _, err := tx.Exec(`INSERT INTO tasks(id,title,content,priority,type_id,due_at_utc,status,created_at_utc,updated_at_utc) VALUES(?,?,?,?,?,?,?,?,?)`,
-			task.ID, task.Title, task.Content, task.Priority, task.TypeID, task.DueAtUTC, task.Status, task.CreatedAtUTC, task.UpdatedAtUTC); err != nil {
+		if _, err := tx.Exec(`INSERT INTO tasks(id,title,content,priority,type_id,due_at_utc,status,step_id,created_at_utc,updated_at_utc) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+			task.ID, task.Title, task.Content, task.Priority, task.TypeID, task.DueAtUTC, task.Status, task.StepID, task.CreatedAtUTC, task.UpdatedAtUTC); err != nil {
 			return err
 		}
 		for _, periodID := range task.LinkedPeriodIDs {
@@ -246,6 +269,18 @@ func ImportJSONSnapshot(db *sql.DB, path string) error {
 		}
 	}
 	return tx.Commit()
+}
+
+func boardStepsString(steps []BoardStep) string {
+	if len(steps) == 0 {
+		return ""
+	}
+	normalized, err := normalizeBoardSteps(steps)
+	if err != nil {
+		return ""
+	}
+	encoded, _ := json.Marshal(normalized)
+	return string(encoded)
 }
 
 func boolString(value bool) string {
