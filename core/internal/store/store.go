@@ -23,6 +23,7 @@ type Task struct {
 	TypeID          *string         `json:"typeId"`
 	DueAtUTC        *string         `json:"dueAtUtc"`
 	Status          string          `json:"status"`
+	StepID          *string         `json:"stepId"`
 	LinkedPeriodIDs []string        `json:"linkedPeriodIds"`
 	RecurrenceRule  *RecurrenceRule `json:"recurrenceRule"`
 	CreatedAtUTC    string          `json:"createdAtUtc"`
@@ -78,7 +79,8 @@ type Settings struct {
 	QuietHoursEnabled    bool   `json:"quietHoursEnabled"`
 	QuietHoursStart      string `json:"quietHoursStart"`
 	QuietHoursEnd        string `json:"quietHoursEnd"`
-	DefaultSnoozeMinutes int    `json:"defaultSnoozeMinutes"`
+	DefaultSnoozeMinutes int         `json:"defaultSnoozeMinutes"`
+	BoardSteps           []BoardStep `json:"boardSteps"`
 }
 
 type NotificationHistory struct {
@@ -122,6 +124,7 @@ type CreateTaskInput struct {
 	Priority        string          `json:"priority"`
 	TypeID          *string         `json:"typeId"`
 	DueAtUTC        *string         `json:"dueAtUtc"`
+	StepID          *string         `json:"stepId"`
 	LinkedPeriodIDs []string        `json:"linkedPeriodIds"`
 	RecurrenceRule  *RecurrenceRule `json:"recurrenceRule"`
 }
@@ -158,6 +161,7 @@ type UpdateTaskInput struct {
 	Priority            *string         `json:"priority"`
 	TypeID              *string         `json:"typeId"`
 	DueAtUTC            *string         `json:"dueAtUtc"`
+	StepID              *string         `json:"stepId"`
 	LinkedPeriodIDs     []string        `json:"linkedPeriodIds"`
 	RecurrenceRule      *RecurrenceRule `json:"recurrenceRule"`
 	RecurrenceEditScope string          `json:"recurrenceEditScope"`
@@ -200,6 +204,7 @@ func (s *Store) Migrate() error {
 		`CREATE TABLE IF NOT EXISTS task_types(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, color TEXT NOT NULL, icon TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, title TEXT NOT NULL, priority TEXT NOT NULL, type_id TEXT REFERENCES task_types(id), due_at_utc TEXT, status TEXT NOT NULL, created_at_utc TEXT NOT NULL, updated_at_utc TEXT NOT NULL, deleted_at_utc TEXT)`,
 		`ALTER TABLE tasks ADD COLUMN content TEXT`,
+		`ALTER TABLE tasks ADD COLUMN step_id TEXT`,
 		`CREATE TABLE IF NOT EXISTS time_periods(id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, start_at_utc TEXT NOT NULL, end_at_utc TEXT NOT NULL, source_timezone TEXT NOT NULL, category TEXT NOT NULL, color TEXT NOT NULL, status TEXT NOT NULL, notes TEXT, created_at_utc TEXT NOT NULL, updated_at_utc TEXT NOT NULL, deleted_at_utc TEXT)`,
 		`CREATE TABLE IF NOT EXISTS task_period_links(task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, period_id TEXT NOT NULL REFERENCES time_periods(id) ON DELETE CASCADE, completed_during_period INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(task_id, period_id))`,
 		`CREATE TABLE IF NOT EXISTS recurrence_rules(id TEXT PRIMARY KEY, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL, frequency TEXT NOT NULL, interval_count INTEGER NOT NULL DEFAULT 1, weekdays TEXT, month_rule TEXT, starts_on TEXT, ends_on TEXT, occurrence_count INTEGER)`,
@@ -218,7 +223,7 @@ func (s *Store) Migrate() error {
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.Exec(stmt); err != nil {
-			if strings.Contains(stmt, `ALTER TABLE tasks ADD COLUMN content`) && strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+			if strings.HasPrefix(stmt, `ALTER TABLE tasks ADD COLUMN`) && strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
 				continue
 			}
 			return err
@@ -305,7 +310,10 @@ func (s *Store) CreateTask(input CreateTaskInput) (Task, error) {
 		return Task{}, err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`INSERT INTO tasks(id,title,content,priority,type_id,due_at_utc,status,created_at_utc,updated_at_utc) VALUES(?,?,?,?,?,?,'open',?,?)`, id, input.Title, input.Content, input.Priority, input.TypeID, input.DueAtUTC, now, now); err != nil {
+	if input.StepID != nil && *input.StepID == "" {
+		input.StepID = nil
+	}
+	if _, err := tx.Exec(`INSERT INTO tasks(id,title,content,priority,type_id,due_at_utc,status,step_id,created_at_utc,updated_at_utc) VALUES(?,?,?,?,?,?,'open',?,?,?)`, id, input.Title, input.Content, input.Priority, input.TypeID, input.DueAtUTC, input.StepID, now, now); err != nil {
 		return Task{}, err
 	}
 	if input.DueAtUTC != nil {
@@ -418,6 +426,14 @@ func (s *Store) UpdateTask(input UpdateTaskInput) (Task, error) {
 	priority := current.Priority
 	typeID := current.TypeID
 	dueAt := current.DueAtUTC
+	stepID := current.StepID
+	if input.StepID != nil {
+		if *input.StepID == "" {
+			stepID = nil
+		} else {
+			stepID = input.StepID
+		}
+	}
 	if input.Title != nil {
 		if *input.Title == "" {
 			return Task{}, errors.New("task title is required")
@@ -442,7 +458,7 @@ func (s *Store) UpdateTask(input UpdateTaskInput) (Task, error) {
 	}
 	scope := recurrenceScope(input.RecurrenceEditScope)
 	if current.RecurrenceRule != nil && scope == "this" {
-		return s.CreateTask(CreateTaskInput{Title: title, Content: content, Priority: priority, TypeID: typeID, DueAtUTC: dueAt, LinkedPeriodIDs: input.LinkedPeriodIDs, RecurrenceRule: nil})
+		return s.CreateTask(CreateTaskInput{Title: title, Content: content, Priority: priority, TypeID: typeID, DueAtUTC: dueAt, StepID: stepID, LinkedPeriodIDs: input.LinkedPeriodIDs, RecurrenceRule: nil})
 	}
 	if current.RecurrenceRule != nil && scope == "following" {
 		if dueAt == nil {
@@ -462,14 +478,14 @@ func (s *Store) UpdateTask(input UpdateTaskInput) (Task, error) {
 		if newRule != nil {
 			newRule.StartsOn = &startsOn
 		}
-		return s.CreateTask(CreateTaskInput{Title: title, Content: content, Priority: priority, TypeID: typeID, DueAtUTC: dueAt, LinkedPeriodIDs: input.LinkedPeriodIDs, RecurrenceRule: newRule})
+		return s.CreateTask(CreateTaskInput{Title: title, Content: content, Priority: priority, TypeID: typeID, DueAtUTC: dueAt, StepID: stepID, LinkedPeriodIDs: input.LinkedPeriodIDs, RecurrenceRule: newRule})
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return Task{}, err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`UPDATE tasks SET title=?, content=?, priority=?, type_id=?, due_at_utc=?, updated_at_utc=? WHERE id=? AND deleted_at_utc IS NULL`, title, content, priority, typeID, dueAt, time.Now().UTC().Format(time.RFC3339), input.ID); err != nil {
+	if _, err := tx.Exec(`UPDATE tasks SET title=?, content=?, priority=?, type_id=?, due_at_utc=?, step_id=?, updated_at_utc=? WHERE id=? AND deleted_at_utc IS NULL`, title, content, priority, typeID, dueAt, stepID, time.Now().UTC().Format(time.RFC3339), input.ID); err != nil {
 		return Task{}, err
 	}
 	if dueAt != nil {

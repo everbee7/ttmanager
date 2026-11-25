@@ -35,11 +35,12 @@ func (s *Store) settings() Settings {
 		QuietHoursStart:      valueDefault(values["quietHoursStart"], "22:00"),
 		QuietHoursEnd:        valueDefault(values["quietHoursEnd"], "07:00"),
 		DefaultSnoozeMinutes: atoiDefault(values["defaultSnoozeMinutes"], 15),
+		BoardSteps:           parseBoardSteps(values["boardSteps"]),
 	}
 }
 
 func defaultSettings() Settings {
-	return Settings{Theme: "system", DefaultTimezone: "America/Denver", MinimizeToTray: true, CloseToTray: true, SnapIntervalMinutes: 15, TimeFormat: "12h", NotificationsEnabled: true, PeriodNotifications: true, TaskNotifications: true, QuietHoursStart: "22:00", QuietHoursEnd: "07:00", DefaultSnoozeMinutes: 15}
+	return Settings{Theme: "system", DefaultTimezone: "America/Denver", MinimizeToTray: true, CloseToTray: true, SnapIntervalMinutes: 15, TimeFormat: "12h", NotificationsEnabled: true, PeriodNotifications: true, TaskNotifications: true, QuietHoursStart: "22:00", QuietHoursEnd: "07:00", DefaultSnoozeMinutes: 15, BoardSteps: defaultBoardSteps()}
 }
 
 func (s *Store) taskTypes() []TaskType {
@@ -59,7 +60,7 @@ func (s *Store) taskTypes() []TaskType {
 }
 
 func (s *Store) tasks() []Task {
-	rows, err := s.db.Query(`SELECT id,title,content,priority,type_id,due_at_utc,status,created_at_utc,updated_at_utc FROM tasks WHERE deleted_at_utc IS NULL ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, due_at_utc`)
+	rows, err := s.db.Query(`SELECT id,title,content,priority,type_id,due_at_utc,status,step_id,created_at_utc,updated_at_utc FROM tasks WHERE deleted_at_utc IS NULL ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, due_at_utc`)
 	if err != nil {
 		return nil
 	}
@@ -67,8 +68,8 @@ func (s *Store) tasks() []Task {
 	var out []Task
 	for rows.Next() {
 		var item Task
-		var content, typeID, due sql.NullString
-		if rows.Scan(&item.ID, &item.Title, &content, &item.Priority, &typeID, &due, &item.Status, &item.CreatedAtUTC, &item.UpdatedAtUTC) == nil {
+		var content, typeID, due, stepID sql.NullString
+		if rows.Scan(&item.ID, &item.Title, &content, &item.Priority, &typeID, &due, &item.Status, &stepID, &item.CreatedAtUTC, &item.UpdatedAtUTC) == nil {
 			if content.Valid {
 				item.Content = &content.String
 			}
@@ -77,6 +78,9 @@ func (s *Store) tasks() []Task {
 			}
 			if due.Valid {
 				item.DueAtUTC = &due.String
+			}
+			if stepID.Valid {
+				item.StepID = &stepID.String
 			}
 			out = append(out, item)
 		}
@@ -90,15 +94,15 @@ func (s *Store) tasks() []Task {
 }
 
 func (s *Store) taskByID(id string) (Task, error) {
-	rows, err := s.db.Query(`SELECT id,title,content,priority,type_id,due_at_utc,status,created_at_utc,updated_at_utc FROM tasks WHERE id=? AND deleted_at_utc IS NULL`, id)
+	rows, err := s.db.Query(`SELECT id,title,content,priority,type_id,due_at_utc,status,step_id,created_at_utc,updated_at_utc FROM tasks WHERE id=? AND deleted_at_utc IS NULL`, id)
 	if err != nil {
 		return Task{}, err
 	}
 	defer rows.Close()
 	if rows.Next() {
 		var item Task
-		var content, typeID, due sql.NullString
-		if err := rows.Scan(&item.ID, &item.Title, &content, &item.Priority, &typeID, &due, &item.Status, &item.CreatedAtUTC, &item.UpdatedAtUTC); err != nil {
+		var content, typeID, due, stepID sql.NullString
+		if err := rows.Scan(&item.ID, &item.Title, &content, &item.Priority, &typeID, &due, &item.Status, &stepID, &item.CreatedAtUTC, &item.UpdatedAtUTC); err != nil {
 			return Task{}, err
 		}
 		if content.Valid {
@@ -109,6 +113,9 @@ func (s *Store) taskByID(id string) (Task, error) {
 		}
 		if due.Valid {
 			item.DueAtUTC = &due.String
+		}
+		if stepID.Valid {
+			item.StepID = &stepID.String
 		}
 		item.LinkedPeriodIDs = s.linkedPeriods(item.ID)
 		rows.Close()
